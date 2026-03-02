@@ -1,8 +1,9 @@
 import { useState } from "react"
+import { Lock } from "lucide-react"
 
-const BAGS_LIMIT = 10
 const defaultSettings = {
     winScore: 500,
+    bagLimit: 10,
     bagPenalty: 100,
     nilBonus: 100,
     allowNil: true,
@@ -22,14 +23,14 @@ function ScoreBar({ score, max }: { score: number; max: number }) {
 }
 
 // Sub-component: Bag Pips
-function Pips({ bags }: { bags: number }) {
+function Pips({ bags, bag_limit }: { bags: number; bag_limit: number }) {
     return (
         <div className="flex gap-1 mt-[6px]">
-            {Array.from({ length: 10 }).map((_, i) => (
+            {Array.from({ length: bag_limit }).map((_, i) => (
                 <div
                     key={i}
                     className={`w-[9px] h-[9px] rounded-full border transition-colors ${
-                        i < bags % 10
+                        i < bags % bag_limit
                             ? "bg-[#fbbf24] border-[#f59e0b]"
                             : "bg-[#374151] border-[#4b5563]"
                     }`}
@@ -120,8 +121,8 @@ export default function App() {
                     delta = -(bid * 10)
                 }
                 delta -=
-                    (Math.floor(newBags / BAGS_LIMIT) -
-                        Math.floor(team.bags / BAGS_LIMIT)) *
+                    (Math.floor(newBags / settings.bagLimit) -
+                        Math.floor(team.bags / settings.bagLimit)) *
                     settings.bagPenalty
             }
             return { ...team, score: team.score + delta, bags: newBags }
@@ -162,9 +163,9 @@ export default function App() {
             <div className="min-h-screen bg-[#0f0a1e] text-white flex flex-col items-center justify-center p-6 font-sans">
                 <div className="text-7xl mb-1">♠</div>
                 <h1 className="text-[46px] font-black m-0 bg-gradient-to-br from-[#818cf8] to-[#c084fc] bg-clip-text text-transparent">
-                    Spades
+                    Bookkeeper
                 </h1>
-                <p className="text-[#818cf8] mb-10 text-base">Scorekeeper</p>
+                <p className="text-[#818cf8] mb-10 text-base">Spades Scorekeeping</p>
                 <div className="w-full max-w-[360px]">
                     <label className="text-[12px] text-[#818cf8] font-bold tracking-widest block mb-2 uppercase">
                         Room Name
@@ -293,7 +294,8 @@ export default function App() {
                     <div className={cardClass + " mb-7"}>
                         {[
                             ["winScore", "Winning Score", "pts"],
-                            ["bagPenalty", "Bag Penalty (per 10 bags)", "pts"],
+                            ["bagLimit", "Bag Limit", "bags"],
+                            ["bagPenalty", "Bag Penalty (per # bags)", "pts"],
                             ["nilBonus", "Nil Bonus / Penalty", "pts"],
                         ].map(([k, label, unit]) => (
                             <div
@@ -346,7 +348,7 @@ export default function App() {
                         className={`${bigBtnBase} bg-gradient-to-br from-[#6366f1] to-[#a855f7] text-white`}
                         onClick={startGame}
                     >
-                        🃏 Start Game
+                        Start Game
                     </button>
                 </div>
             </div>
@@ -365,7 +367,7 @@ export default function App() {
     return (
         <div className="min-h-screen bg-[#0f0a1e] text-white font-sans">
             {/* Navbar */}
-            <div className="flex items-center justify-between py-3.5 px-5 border-b border-[#8b5cf633] bg-black/30">
+            <div className="flex flex-wrap gap-y-2 items-center justify-between py-3.5 px-5 border-b border-[#8b5cf633] bg-black/30">
                 <div className="flex items-center gap-2.5">
                     <span className="text-[18px]">♠</span>
                     <span className="font-black text-[17px]">{room}</span>
@@ -412,9 +414,14 @@ export default function App() {
                                 </span>
                                 <span className="text-[10px] text-gray-500 ml-1.5">
                                     (next penalty in{" "}
-                                    {BAGS_LIMIT - (t.bags % BAGS_LIMIT)})
+                                    {settings.bagLimit -
+                                        (t.bags % settings.bagLimit)}
+                                    )
                                 </span>
-                                <Pips bags={t.bags} />
+                                <Pips
+                                    bags={t.bags}
+                                    bag_limit={settings.bagLimit}
+                                />
                             </div>
                             {history.length > 0 && (
                                 <div className="mt-2.5 text-[11px] text-[#818cf8]">
@@ -492,10 +499,11 @@ export default function App() {
                             </div>
                         ))}
                         <button
-                            className={`${bigBtnBase} ${bids[0] === "" || bids[1] === "" ? "bg-[#2d2748] text-gray-500 cursor-not-allowed" : "bg-gradient-to-br from-[#6366f1] to-[#a855f7] text-white"}`}
+                            className={`flex items-center justify-center gap-2 ${bigBtnBase} ${bids[0] === "" || bids[1] === "" ? "bg-[#2d2748] text-gray-500 cursor-not-allowed" : "bg-gradient-to-br from-[#6366f1] to-[#a855f7] text-white"}`}
                             onClick={submitBids}
                         >
-                            Lock Bids — Start Tricks →
+                            Lock Bids
+                            <Lock size={16} />
                         </button>
                     </div>
                 )}
