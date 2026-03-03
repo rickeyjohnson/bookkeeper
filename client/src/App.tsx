@@ -1,6 +1,5 @@
-import { useState } from "react"
 import { Lock } from "lucide-react"
-import Home from "./screens/Home"
+import { useSessionStorage } from "usehooks-ts"
 
 const defaultSettings = {
     winScore: 500,
@@ -10,8 +9,7 @@ const defaultSettings = {
     allowNil: true,
 }
 
-// Sub-component: Progress Bar
-function ScoreBar({ score, max }: { score: number; max: number }) {
+const ScoreBar = ({ score, max }: { score: number; max: number }) => {
     const pct = Math.max(0, Math.min(100, (score / max) * 100))
     return (
         <div className="bg-[#1e1b4b] rounded-full h-[6px] mt-[6px] overflow-hidden">
@@ -23,8 +21,7 @@ function ScoreBar({ score, max }: { score: number; max: number }) {
     )
 }
 
-// Sub-component: Bag Pips
-function Pips({ bags, bag_limit }: { bags: number; bag_limit: number }) {
+const Pips = ({ bags, bag_limit }: { bags: number; bag_limit: number }) => {
     return (
         <div className="flex gap-1 mt-[6px]">
             {Array.from({ length: bag_limit }).map((_, i) => (
@@ -42,28 +39,36 @@ function Pips({ bags, bag_limit }: { bags: number; bag_limit: number }) {
 }
 
 export default function App() {
-    const [screen, setScreen] = useState("home")
-    const [room, setRoom] = useState("")
-    const [teams, setTeams] = useState([
+    const [screen, setScreen] = useSessionStorage("screen", "home")
+    const [room, setRoom] = useSessionStorage("room", "")
+    const [teams, setTeams] = useSessionStorage("teams", [
         { name: "Team North/South", score: 0, bags: 0 },
         { name: "Team East/West", score: 0, bags: 0 },
     ])
-    const [settings, setSettings] = useState({ ...defaultSettings })
-    const [round, setRound] = useState(1)
-    const [phase, setPhase] = useState("bidding")
-    const [bids, setBids] = useState(["", ""])
-    const [tricks, setTricks] = useState(["", ""])
-    const [history, setHistory] = useState<
+    const [settings, setSettings] = useSessionStorage("settings", {
+        ...defaultSettings,
+    })
+    const [round, setRound] = useSessionStorage("round", 1)
+    const [phase, setPhase] = useSessionStorage("phase", "bidding")
+    const [bids, setBids] = useSessionStorage("bids", ["", ""])
+    const [tricks, setTricks] = useSessionStorage("tricks", ["", ""])
+    const [history, setHistory] = useSessionStorage<
         Array<{
             round: number
             bids: string[]
             tricks: string[]
             scores: number[]
         }>
-    >([])
-    const [showHistory, setShowHistory] = useState(false)
-    const [editIdx, setEditIdx] = useState<null | number>(null)
-    const [tempName, setTempName] = useState("")
+    >("history", [])
+    const [showHistory, setShowHistory] = useSessionStorage(
+        "show_history",
+        false,
+    )
+    const [editIdx, setEditIdx] = useSessionStorage<null | number>(
+        "edit_idx",
+        null,
+    )
+    const [tempName, setTempName] = useSessionStorage("tempName", "")
 
     const resetAll = () => {
         setScreen("home")
@@ -161,16 +166,39 @@ export default function App() {
     // HOME SCREEN
     if (screen === "home")
         return (
-            <Home
-                room={room}
-                onRoomChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    setRoom(e.target.value)
-                }
-                onKeyDown={(e: React.KeyboardEvent) =>
-                    e.key === "Enter" && room.trim() && setScreen("lobby")
-                }
-                onRoomCreate={() => room.trim() && setScreen("lobby")}
-            />
+            <div className="min-h-screen bg-[#0f0a1e] text-white flex flex-col items-center justify-center p-6 font-sans">
+                <div className="text-7xl mb-1">♠</div>
+                <h1 className="text-[46px] font-black m-0 bg-gradient-to-br from-[#818cf8] to-[#c084fc] bg-clip-text text-transparent">
+                    Bookkeeper
+                </h1>
+                <p className="text-[#818cf8] mb-10 text-base">
+                    Spades Scorekeeping
+                </p>
+                <div className="w-full max-w-[360px]">
+                    <label className="text-[12px] text-[#818cf8] font-bold tracking-widest block mb-2 uppercase">
+                        Room Name
+                    </label>
+                    <input
+                        className="w-full py-[13px] px-4 rounded-[13px] border border-[#8b5cf666] bg-[#8b5cf61a] text-white text-[17px] outline-none placeholder:text-white/20"
+                        placeholder="e.g. Friday Night Cards"
+                        value={room}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            setRoom(e.target.value)
+                        }
+                        onKeyDown={(e: React.KeyboardEvent) =>
+                            e.key === "Enter" &&
+                            room.trim() &&
+                            setScreen("lobby")
+                        }
+                    />
+                    <button
+                        className={`${bigBtnBase} ${room.trim() ? "bg-gradient-to-br from-[#6366f1] to-[#a855f7] text-white" : "bg-[#2d2748] text-gray-500 cursor-not-allowed"}`}
+                        onClick={() => room.trim() && setScreen("lobby")}
+                    >
+                        Create Room →
+                    </button>
+                </div>
+            </div>
         )
 
     // LOBBY SCREEN
@@ -291,7 +319,11 @@ export default function App() {
                                     <input
                                         type="number"
                                         className="w-20 py-1.5 px-2.5 rounded-lg border border-[#8b5cf666] bg-[#8b5cf61f] text-white text-center outline-none"
-                                        value={settings[k]}
+                                        value={String(
+                                            settings[
+                                                k as keyof typeof settings
+                                            ],
+                                        )}
                                         onChange={(e) =>
                                             setSettings((s) => ({
                                                 ...s,
