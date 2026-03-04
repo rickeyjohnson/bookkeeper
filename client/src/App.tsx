@@ -1,5 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Lock } from "lucide-react"
-import { useSessionStorage } from "usehooks-ts"
+import { useEffect, useState } from "react"
+import { useLocalStorage, useSessionStorage } from "usehooks-ts"
 
 const defaultSettings = {
     winScore: 500,
@@ -38,37 +40,212 @@ const Pips = ({ bags, bag_limit }: { bags: number; bag_limit: number }) => {
     )
 }
 
+const PreviousGameCard = ({ game, onResume, onDelete }) => {
+    const isDone = game.phase === "done"
+    const winner = isDone
+        ? game.teams[0].score >= game.teams[1].score
+            ? game.teams[0]
+            : game.teams[1]
+        : null
+    const scoreGap = Math.abs(game.teams[0].score - game.teams[1].score)
+    const leading = game.teams[0].score >= game.teams[1].score ? 0 : 1
+
+    const formatDate = (ts) => {
+        const d = new Date(ts)
+        const now = new Date()
+        const diffMs = now - d
+        const diffMins = Math.floor(diffMs / 60000)
+        const diffHours = Math.floor(diffMs / 3600000)
+        const diffDays = Math.floor(diffMs / 86400000)
+        if (diffMins < 1) return "Just now"
+        if (diffMins < 60) return `${diffMins}m ago`
+        if (diffHours < 24) return `${diffHours}h ago`
+        if (diffDays === 1) return "Yesterday"
+        if (diffDays < 7) return `${diffDays}d ago`
+        return d.toLocaleDateString()
+    }
+
+    return (
+        <div
+            className="relative group bg-[rgba(139,92,246,0.08)] border border-[rgba(139,92,246,0.25)] rounded-[18px] p-4 cursor-pointer hover:border-[rgba(139,92,246,0.55)] hover:bg-[rgba(139,92,246,0.13)] transition-all duration-200"
+            onClick={() => onResume(game)}
+        >
+            {/* Delete button */}
+            <button
+                onClick={(e) => {
+                    e.stopPropagation()
+                    onDelete(game.id)
+                }}
+                className="absolute top-3 right-3 w-6 h-6 rounded-full bg-[rgba(239,68,68,0.0)] hover:bg-[rgba(239,68,68,0.2)] text-[rgba(255,255,255,0.0)] group-hover:text-[#fca5a5] border-none cursor-pointer text-xs font-bold transition-all duration-150 flex items-center justify-center"
+            >
+                ✕
+            </button>
+
+            {/* Header row */}
+            <div className="flex items-center justify-between mb-3 pr-5">
+                <div className="flex items-center gap-2">
+                    <span className="text-base">♠</span>
+                    <span className="font-black text-[15px] text-white truncate max-w-[120px]">
+                        {game.room}
+                    </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    {isDone ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[rgba(250,204,21,0.15)] text-[#fbbf24] border border-[rgba(250,204,21,0.3)]">
+                            FINISHED
+                        </span>
+                    ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[rgba(139,92,246,0.2)] text-[#c4b5fd] border border-[rgba(139,92,246,0.35)]">
+                            ROUND {game.round}
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            {/* Teams + scores */}
+            <div className="flex flex-col gap-2 mb-3">
+                {game.teams.map((t, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-sm">
+                                {i === 0 ? "🔵" : "🔴"}
+                            </span>
+                            <span
+                                className={`text-xs font-semibold truncate max-w-[130px] ${i === leading && !isDone ? "text-white" : isDone && winner === t ? "text-[#fbbf24]" : "text-[#a78bfa]"}`}
+                            >
+                                {t.name}
+                            </span>
+                            {isDone && winner === t && (
+                                <span className="text-xs">👑</span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[11px] text-[#fbbf24]">
+                                🛄{t.bags}
+                            </span>
+                            <span
+                                className={`font-black text-[18px] leading-none ${i === leading && !isDone ? "text-white" : isDone && winner === t ? "text-[#fbbf24]" : "text-[#818cf8]"}`}
+                            >
+                                {t.score}
+                            </span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Progress bars */}
+            <div className="flex flex-col gap-1 mb-3">
+                {game.teams.map((t, i) => (
+                    <ScoreBar
+                        key={i}
+                        score={t.score}
+                        max={game.settings.winScore}
+                    />
+                ))}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#6b7280]">
+                    {formatDate(game.savedAt)}
+                </span>
+                {!isDone && (
+                    <span className="text-[10px] font-bold text-[#818cf8]">
+                        {game.phase === "bidding" ? "🃏 Bidding" : "✋ Tricks"}{" "}
+                        phase
+                    </span>
+                )}
+                {isDone && (
+                    <span className="text-[10px] text-[#6b7280]">
+                        {scoreGap > 0 ? `Won by ${scoreGap} pts` : "Tied"}
+                    </span>
+                )}
+            </div>
+
+            {/* Hover resume hint */}
+            <div className="absolute inset-0 rounded-[18px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none">
+                <div className="bg-[rgba(99,102,241,0.15)] rounded-[18px] inset-0 absolute" />
+                <span className="relative z-10 text-xs font-bold text-[#c4b5fd] bg-[rgba(15,10,30,0.85)] px-3 py-1.5 rounded-full border border-[rgba(139,92,246,0.4)]">
+                    {isDone ? "👁 View Results" : "▶ Resume Game"}
+                </span>
+            </div>
+        </div>
+    )
+}
+
 export default function App() {
-    const [screen, setScreen] = useSessionStorage("screen", "home")
-    const [room, setRoom] = useSessionStorage("room", "")
-    const [teams, setTeams] = useSessionStorage("teams", [
-        { name: "Team North/South", score: 0, bags: 0 },
-        { name: "Team East/West", score: 0, bags: 0 },
-    ])
-    const [settings, setSettings] = useSessionStorage("settings", {
-        ...defaultSettings,
-    })
-    const [round, setRound] = useSessionStorage("round", 1)
-    const [phase, setPhase] = useSessionStorage("phase", "bidding")
-    const [bids, setBids] = useSessionStorage("bids", ["", ""])
-    const [tricks, setTricks] = useSessionStorage("tricks", ["", ""])
-    const [history, setHistory] = useSessionStorage<
+    const [backlog, setBacklog, removeBacklog] = useLocalStorage<any[]>(
+        "saved_games",
+        [],
+    )
+    const [session, setSession] = useSessionStorage<any | null>(
+        "active_session",
+        null,
+    )
+
+    const [screen, setScreen] = useState(session?.screen ?? "home")
+    const [room, setRoom] = useState(session?.room ?? "")
+    const [teams, setTeams] = useState(
+        session?.teams ?? [
+            { name: "Team North/South", score: 0, bags: 0 },
+            { name: "Team East/West", score: 0, bags: 0 },
+        ],
+    )
+    const [settings, setSettings] = useState(
+        session?.settings ?? {
+            ...defaultSettings,
+        },
+    )
+    const [round, setRound] = useState(session?.round ?? 1)
+    const [phase, setPhase] = useState(session?.phase ?? "bidding")
+    const [bids, setBids] = useState(session?.bids ?? ["", ""])
+    const [tricks, setTricks] = useState(session?.tricks ?? ["", ""])
+    const [history, setHistory] = useState<
         Array<{
             round: number
             bids: string[]
             tricks: string[]
             scores: number[]
         }>
-    >("history", [])
-    const [showHistory, setShowHistory] = useSessionStorage(
-        "show_history",
-        false,
+    >(session?.history ?? [])
+    const [showHistory, setShowHistory] = useState(
+        session?.showHistory ?? false,
     )
-    const [editIdx, setEditIdx] = useSessionStorage<null | number>(
-        "edit_idx",
-        null,
+    const [editIdx, setEditIdx] = useState<null | number>(
+        session?.editIdx ?? null,
     )
-    const [tempName, setTempName] = useSessionStorage("tempName", "")
+    const [tempName, setTempName] = useState(session?.tempName ?? "")
+
+    useEffect(() => {
+        setSession({
+            screen,
+            room,
+            teams,
+            settings,
+            round,
+            phase,
+            bids,
+            tricks,
+            history,
+            showHistory,
+            editIdx,
+            tempName,
+        })
+    }, [
+        screen,
+        room,
+        teams,
+        settings,
+        round,
+        phase,
+        bids,
+        tricks,
+        history,
+        showHistory,
+        editIdx,
+        tempName,
+        setSession,
+    ])
 
     const resetAll = () => {
         setScreen("home")
@@ -87,7 +264,7 @@ export default function App() {
     }
 
     const startGame = () => {
-        setTeams((t) => t.map((x) => ({ ...x, score: 0, bags: 0 })))
+        setTeams((t: any[]) => t.map((x) => ({ ...x, score: 0, bags: 0 })))
         setRound(1)
         setPhase("bidding")
         setBids(["", ""])
@@ -111,28 +288,30 @@ export default function App() {
             return
         }
 
-        const newTeams = teams.map((team, i) => {
-            const bid = +bids[i],
-                won = i === 0 ? t0 : t1
-            let delta = 0,
-                newBags = team.bags
-            if (bid === 0 && settings.allowNil) {
-                delta = won === 0 ? settings.nilBonus : -settings.nilBonus
-            } else {
-                if (won >= bid) {
-                    const over = won - bid
-                    delta = bid * 10 + over
-                    newBags += over
+        const newTeams = teams.map(
+            (team: { bags: number; score: number }, i: number) => {
+                const bid = +bids[i],
+                    won = i === 0 ? t0 : t1
+                let delta = 0,
+                    newBags = team.bags
+                if (bid === 0 && settings.allowNil) {
+                    delta = won === 0 ? settings.nilBonus : -settings.nilBonus
                 } else {
-                    delta = -(bid * 10)
+                    if (won >= bid) {
+                        const over = won - bid
+                        delta = bid * 10 + over
+                        newBags += over
+                    } else {
+                        delta = -(bid * 10)
+                    }
+                    delta -=
+                        (Math.floor(newBags / settings.bagLimit) -
+                            Math.floor(team.bags / settings.bagLimit)) *
+                        settings.bagPenalty
                 }
-                delta -=
-                    (Math.floor(newBags / settings.bagLimit) -
-                        Math.floor(team.bags / settings.bagLimit)) *
-                    settings.bagPenalty
-            }
-            return { ...team, score: team.score + delta, bags: newBags }
-        })
+                return { ...team, score: team.score + delta, bags: newBags }
+            },
+        )
 
         setHistory((h) => [
             ...h,
@@ -140,18 +319,30 @@ export default function App() {
                 round,
                 bids: [...bids],
                 tricks: [...tricks],
-                scores: newTeams.map((t) => t.score),
+                scores: newTeams.map((t: { score: any }) => t.score),
             },
         ])
         setTeams(newTeams)
 
-        if (newTeams.some((t) => t.score >= settings.winScore)) {
+        if (
+            newTeams.some(
+                (t: { score: number }) => t.score >= settings.winScore,
+            )
+        ) {
             setPhase("done")
         } else {
-            setRound((r) => r + 1)
+            setRound((r: number) => r + 1)
             setPhase("bidding")
             setBids(["", ""])
             setTricks(["", ""])
+        }
+    }
+
+    const saveToLocalStorage = () => {
+        if (session) {
+            setBacklog((prev) => [...prev, session])
+            setSession(null)
+            resetAll()
         }
     }
 
@@ -174,7 +365,7 @@ export default function App() {
                 <p className="text-[#818cf8] mb-10 text-base">
                     Spades Scorekeeping
                 </p>
-                <div className="w-full max-w-[360px]">
+                <div className="w-full max-w-[360px] pb-10">
                     <label className="text-[12px] text-[#818cf8] font-bold tracking-widest block mb-2 uppercase">
                         Room Name
                     </label>
@@ -198,6 +389,50 @@ export default function App() {
                         Create Room →
                     </button>
                 </div>
+                {/* Previous Games */}
+                {backlog.length > 0 && (
+                    <div className="px-4 pb-10 max-w-[780px] mx-auto">
+                        <div className="flex items-center justify-between mb-3">
+                            <p className="text-xs text-[#7c3aed] font-bold tracking-[2px] m-0">
+                                PREVIOUS GAMES
+                            </p>
+                            <button
+                                onClick={() => {
+                                    if (
+                                        window.confirm(
+                                            "Delete all saved games?",
+                                        )
+                                    ) {
+                                        localStorage.removeItem(STORAGE_KEY)
+                                        setBacklog([])
+                                    }
+                                }}
+                                className="text-[10px] text-[#6b7280] hover:text-[#fca5a5] bg-transparent border-none cursor-pointer font-semibold transition-colors"
+                            >
+                                Clear all
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            {backlog.map((game) => (
+                                <PreviousGameCard
+                                    key={game.id}
+                                    game={game}
+                                    onResume={() => {}}
+                                    onDelete={() => {}}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {backlog.length === 0 && (
+                    <div className="flex flex-col items-center pb-10 opacity-30">
+                        <div className="text-3xl mb-2">🃏</div>
+                        <p className="text-xs text-[#818cf8] font-semibold m-0">
+                            No previous games yet
+                        </p>
+                    </div>
+                )}
             </div>
         )
 
@@ -227,7 +462,7 @@ export default function App() {
                         Teams
                     </p>
                     <div className="flex flex-col gap-2.5 mb-7">
-                        {teams.map((t, i) => (
+                        {teams.map((t: any, i: any) => (
                             <div
                                 key={i}
                                 className={`${cardClass} flex items-center gap-3`}
@@ -246,8 +481,8 @@ export default function App() {
                                             }
                                             onKeyDown={(e) =>
                                                 e.key === "Enter" &&
-                                                (setTeams((tm) =>
-                                                    tm.map((x, j) =>
+                                                (setTeams((tm: any) =>
+                                                    tm.map((x: any, j: any) =>
                                                         j === i
                                                             ? {
                                                                   ...x,
@@ -261,8 +496,8 @@ export default function App() {
                                         />
                                         <button
                                             onClick={() => {
-                                                setTeams((tm) =>
-                                                    tm.map((x, j) =>
+                                                setTeams((tm: any) =>
+                                                    tm.map((x: any, j: any) =>
                                                         j === i
                                                             ? {
                                                                   ...x,
@@ -325,7 +560,7 @@ export default function App() {
                                             ],
                                         )}
                                         onChange={(e) =>
-                                            setSettings((s) => ({
+                                            setSettings((s: any) => ({
                                                 ...s,
                                                 [k as keyof typeof settings]:
                                                     +e.target.value,
@@ -344,7 +579,7 @@ export default function App() {
                             </span>
                             <div
                                 onClick={() =>
-                                    setSettings((s) => ({
+                                    setSettings((s: any) => ({
                                         ...s,
                                         allowNil: !s.allowNil,
                                     }))
@@ -382,7 +617,12 @@ export default function App() {
         <div className="min-h-screen bg-[#0f0a1e] text-white font-sans">
             {/* Navbar */}
             <div className="flex flex-wrap gap-y-2 items-center justify-between py-3.5 px-5 border-b border-[#8b5cf633] bg-black/30">
-                <div className="flex items-center gap-2.5">
+                <div
+                    className="flex items-center gap-2.5"
+                    onClick={() => {
+                        saveToLocalStorage()
+                    }}
+                >
                     <span className="text-[18px]">♠</span>
                     <span className="font-black text-[17px]">{room}</span>
                     <span className="bg-[#7c3aed4d] text-[#c4b5fd] rounded-full px-2.5 py-0.5 text-[12px] font-bold">
@@ -391,7 +631,7 @@ export default function App() {
                 </div>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => setShowHistory((h) => !h)}
+                        onClick={() => setShowHistory((h: any) => !h)}
                         className="bg-[#8b5cf626] border border-[#8b5cf64d] text-[#a78bfa] rounded-lg px-3 py-1.5 cursor-pointer text-[12px] font-bold"
                     >
                         {showHistory ? "Hide" : "📋"} History
@@ -408,7 +648,7 @@ export default function App() {
             <div className="max-w-[520px] mx-auto py-5 px-4">
                 {/* Scoreboard Grid */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                    {teams.map((t, i) => (
+                    {teams.map((t: any, i: any) => (
                         <div key={i} className={cardClass}>
                             <div className="flex items-center gap-1.5 mb-2.5">
                                 <span className="text-[18px]">
@@ -481,7 +721,7 @@ export default function App() {
                         <h3 className="m-0 mb-[18px] text-[17px] font-extrabold text-[#e9d5ff]">
                             ✋ Place Bids — Round {round}
                         </h3>
-                        {teams.map((t, i) => (
+                        {teams.map((t: any, i: any) => (
                             <div key={i} className="mb-5 last:mb-0">
                                 <label className="text-[12px] text-[#a78bfa] font-bold tracking-wider block mb-2 uppercase">
                                     {t.name}
@@ -534,7 +774,7 @@ export default function App() {
                             &nbsp;·&nbsp; {teams[1].name}: bid{" "}
                             <strong className="text-white">{bids[1]}</strong>
                         </p>
-                        {teams.map((t, i) => (
+                        {teams.map((t: any, i: any) => (
                             <div key={i} className="mb-5 last:mb-0">
                                 <label className="text-[12px] text-[#a78bfa] font-bold tracking-wider block mb-2 uppercase">
                                     {t.name}{" "}
