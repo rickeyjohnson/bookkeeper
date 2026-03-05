@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Lock } from "lucide-react"
+import { Lock, Pencil, Share, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
-import { useLocalStorage, useSessionStorage } from "usehooks-ts"
 
 const defaultSettings = {
     winScore: 500,
@@ -11,6 +10,36 @@ const defaultSettings = {
     allowNil: true,
 }
 
+const STORAGE_KEY = "spades_saved_games"
+
+// ─── Storage Helpers ─────────────────────────────────────────────────────────────────
+const loadGames = () => {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY)
+        return raw ? JSON.parse(raw) : []
+    } catch {
+        return []
+    }
+}
+
+const saveGame = (gameState) => {
+    try {
+        const games = loadGames()
+        const existing = games.findIndex((g) => g.id === gameState.id)
+        if (existing >= 0) games[existing] = gameState
+        else games.unshift(gameState)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(games.slice(0, 10)))
+    } catch {}
+}
+
+const deleteGame = (id) => {
+    try {
+        const games = loadGames().filter((g) => g.id !== id)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(games))
+    } catch {}
+}
+
+// ─── Sub Components ─────────────────────────────────────────────────────────────────
 const ScoreBar = ({ score, max }: { score: number; max: number }) => {
     const pct = Math.max(0, Math.min(100, (score / max) * 100))
     return (
@@ -40,56 +69,113 @@ const Pips = ({ bags, bag_limit }: { bags: number; bag_limit: number }) => {
     )
 }
 
+const formatDate = (ts) => {
+    const d = new Date(ts)
+    const now = new Date()
+    const diffMs = now - d
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays === 1) return "Yesterday"
+    if (diffDays < 7) return `${diffDays}d ago`
+    return d.toLocaleDateString()
+}
+
+// ─── Previous Game Card ─────────────────────────────────────────────────────────────────
 const PreviousGameCard = ({ game, onResume, onDelete }) => {
+    const [menuOpen, setMenuOpen] = useState(false)
     const isDone = game.phase === "done"
     const winner = isDone
         ? game.teams[0].score >= game.teams[1].score
             ? game.teams[0]
             : game.teams[1]
         : null
-    const scoreGap = Math.abs(game.teams[0].score - game.teams[1].score)
     const leading = game.teams[0].score >= game.teams[1].score ? 0 : 1
 
-    const formatDate = (ts) => {
-        const d = new Date(ts)
-        const now = new Date()
-        const diffMs = now - d
-        const diffMins = Math.floor(diffMs / 60000)
-        const diffHours = Math.floor(diffMs / 3600000)
-        const diffDays = Math.floor(diffMs / 86400000)
-        if (diffMins < 1) return "Just now"
-        if (diffMins < 60) return `${diffMins}m ago`
-        if (diffHours < 24) return `${diffHours}h ago`
-        if (diffDays === 1) return "Yesterday"
-        if (diffDays < 7) return `${diffDays}d ago`
-        return d.toLocaleDateString()
+    const handleDelete = (e) => {
+        e.stopPropagation()
+        setMenuOpen(false)
+        onDelete(game.id)
     }
 
     return (
         <div
-            className="relative group bg-[rgba(139,92,246,0.08)] border border-[rgba(139,92,246,0.25)] rounded-[18px] p-4 cursor-pointer hover:border-[rgba(139,92,246,0.55)] hover:bg-[rgba(139,92,246,0.13)] transition-all duration-200"
+            className="min-w-fill relative group bg-[rgba(139,92,246,0.08)] border border-[rgba(139,92,246,0.25)] rounded-[18px] p-5 cursor-pointer hover:border-[rgba(139,92,246,0.55)] hover:bg-[rgba(139,92,246,0.13)] transition-all duration-200"
             onClick={() => onResume(game)}
         >
-            {/* Delete button */}
-            <button
-                onClick={(e) => {
-                    e.stopPropagation()
-                    onDelete(game.id)
-                }}
-                className="absolute top-3 right-3 w-6 h-6 rounded-full bg-[rgba(239,68,68,0.0)] hover:bg-[rgba(239,68,68,0.2)] text-[rgba(255,255,255,0.0)] group-hover:text-[#fca5a5] border-none cursor-pointer text-xs font-bold transition-all duration-150 flex items-center justify-center"
+            {/* ── 3-dot menu button ── */}
+            <div
+                className="absolute top-4 right-4"
+                onClick={(e) => e.stopPropagation()}
             >
-                ✕
-            </button>
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        setMenuOpen((o) => !o)
+                    }}
+                    className={`w-7 h-7 rounded-full flex items-center justify-center border-none cursor-pointer text-[#a78bfa] hover:bg-[rgba(139,92,246,0.25)] transition-all duration-150 text-base leading-none ${menuOpen ? "bg-[rgba(139,92,246,0.25)]" : "bg-transparent"}`}
+                >
+                    ⋮
+                </button>
+
+                {/* Dropdown */}
+                {menuOpen && (
+                    <>
+                        {/* Backdrop to close */}
+                        <div
+                            className="fixed inset-0 z-10"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                setMenuOpen(false)
+                            }}
+                        />
+                        <div className="absolute right-0 top-8 z-20 w-fit rounded-[14px] overflow-hidden border border-[rgba(139,92,246,0.35)] bg-[#1a1335] shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+                            {[
+                                // {
+                                //     icon: <Share size={18} />,
+                                //     label: "Share",
+                                //     action: () => {},
+                                //     color: "text-[#c4b5fd]",
+                                // },
+                                // {
+                                //     icon: <Pencil size={18} />,
+                                //     label: "Rename",
+                                //     action: () => {},
+                                //     color: "text-[#c4b5fd]",
+                                // },
+                                {
+                                    icon: <Trash2 size={18} />,
+                                    label: "Delete",
+                                    action: handleDelete,
+                                    color: "text-[#fca5a5]",
+                                },
+                            ].map(({ icon, label, action, color }) => (
+                                <button
+                                    key={label}
+                                    onClick={action}
+                                    className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 border-none cursor-pointer text-left text-xs font-semibold ${color} bg-transparent hover:bg-[rgba(139,92,246,0.2)] transition-colors duration-100 last:border-t last:border-[rgba(139,92,246,0.2)]`}
+                                >
+                                    <span>{icon}</span>
+                                    <span>{label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </>
+                )}
+            </div>
 
             {/* Header row */}
-            <div className="flex items-center justify-between mb-3 pr-5">
+            <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                     <span className="text-base">♠</span>
-                    <span className="font-black text-[15px] text-white truncate max-w-[120px]">
+                    <span className="font-black text-[15px] text-white truncate max-w-[100px]">
                         {game.room}
                     </span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 pl-3 pr-7">
                     {isDone ? (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[rgba(250,204,21,0.15)] text-[#fbbf24] border border-[rgba(250,204,21,0.3)]">
                             FINISHED
@@ -120,9 +206,6 @@ const PreviousGameCard = ({ game, onResume, onDelete }) => {
                             )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-[11px] text-[#fbbf24]">
-                                🛄{t.bags}
-                            </span>
                             <span
                                 className={`font-black text-[18px] leading-none ${i === leading && !isDone ? "text-white" : isDone && winner === t ? "text-[#fbbf24]" : "text-[#818cf8]"}`}
                             >
@@ -133,33 +216,11 @@ const PreviousGameCard = ({ game, onResume, onDelete }) => {
                 ))}
             </div>
 
-            {/* Progress bars */}
-            <div className="flex flex-col gap-1 mb-3">
-                {game.teams.map((t, i) => (
-                    <ScoreBar
-                        key={i}
-                        score={t.score}
-                        max={game.settings.winScore}
-                    />
-                ))}
-            </div>
-
             {/* Footer */}
             <div className="flex items-center justify-between">
                 <span className="text-[10px] text-[#6b7280]">
                     {formatDate(game.savedAt)}
                 </span>
-                {!isDone && (
-                    <span className="text-[10px] font-bold text-[#818cf8]">
-                        {game.phase === "bidding" ? "🃏 Bidding" : "✋ Tricks"}{" "}
-                        phase
-                    </span>
-                )}
-                {isDone && (
-                    <span className="text-[10px] text-[#6b7280]">
-                        {scoreGap > 0 ? `Won by ${scoreGap} pts` : "Tied"}
-                    </span>
-                )}
             </div>
 
             {/* Hover resume hint */}
@@ -173,33 +234,233 @@ const PreviousGameCard = ({ game, onResume, onDelete }) => {
     )
 }
 
-export default function App() {
-    const [backlog, setBacklog, removeBacklog] = useLocalStorage<any[]>(
-        "saved_games",
-        [],
-    )
-    const [session, setSession] = useSessionStorage<any | null>(
-        "active_session",
-        null,
-    )
+// ─── Rules Modal ─────────────────────────────────────────────────────────────────
+const RulesModal = ({ onClose }) => {
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-[rgba(0,0,0,0.75)]"
+            onClick={onClose}
+        >
+            <div
+                className="w-full max-w-lg bg-[#1a1335] border border-[rgba(139,92,246,0.35)] rounded-[24px] shadow-[0_24px_64px_rgba(0,0,0,0.7)] max-h-[82vh] flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-[rgba(139,92,246,0.2)] shrink-0">
+                    <div>
+                        <h2 className="m-0 text-white font-black text-xl">
+                            ♠ Rules of Spades
+                        </h2>
+                        <p className="m-0 text-[#818cf8] text-xs mt-1">
+                            Quick reference guide
+                        </p>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="w-8 h-8 rounded-full bg-[rgba(255,255,255,0.07)] border-none text-[#a78bfa] cursor-pointer hover:bg-[rgba(255,255,255,0.12)] text-sm font-bold flex items-center justify-center"
+                    >
+                        ✕
+                    </button>
+                </div>
 
-    const [screen, setScreen] = useState(session?.screen ?? "home")
-    const [room, setRoom] = useState(session?.room ?? "")
-    const [teams, setTeams] = useState(
-        session?.teams ?? [
-            { name: "Team North/South", score: 0, bags: 0 },
-            { name: "Team East/West", score: 0, bags: 0 },
-        ],
+                {/* Scrollable content */}
+                <div className="overflow-y-auto px-6 py-5 flex flex-col gap-5">
+                    {[
+                        // --- CORE MECHANICS ---
+                        {
+                            emoji: "🃏",
+                            category: "Basics",
+                            title: "The Basics",
+                            body: "Spades is a 4-player trick-taking card game played in 2 teams (North/South vs East/West). A standard 52-card deck is used. Spades are always trump — they beat every other suit.",
+                        },
+                        {
+                            emoji: "🔀",
+                            category: "Basics",
+                            title: "The Deal",
+                            body: "The dealer shuffles and deals all 52 cards evenly — 13 cards to each player. Players look at their hand and decide how many tricks they think they can win.",
+                        },
+                        {
+                            emoji: "▶️",
+                            category: "Basics",
+                            title: "Playing Tricks",
+                            body: "The player to the left of the dealer leads first. Players must follow the lead suit if they can. If they can't, they may play any card, including a spade. Spades can't be led until they've been 'broken' — played as a discard on another suit.",
+                        },
+                        {
+                            emoji: "🏆",
+                            category: "Basics",
+                            title: "Winning Tricks",
+                            body: "The highest card of the lead suit wins the trick — unless a spade was played, in which case the highest spade wins. The winner of each trick leads the next one.",
+                        },
+
+                        // --- BIDDING & SCORING ---
+                        {
+                            emoji: "✋",
+                            category: "Bidding",
+                            title: "Standard Bidding",
+                            body: "Each player bids the number of tricks they expect to win (0–13). Teammates' bids are added together. You must bid at least 1 unless bidding Nil.",
+                        },
+                        {
+                            emoji: "🚫",
+                            category: "Bidding",
+                            title: "Nil Bids",
+                            body: "A Nil bid (0) means you expect to win zero tricks. If successful, your team gets a large bonus (usually 100pts). If you win even one trick, you are 'set' and penalized that same amount.",
+                        },
+                        {
+                            emoji: "🌑",
+                            category: "Bidding",
+                            title: "Blind Nil",
+                            body: "Declared before looking at your cards. This usually doubles the Nil bonus (200pts), but carries an equal penalty if you fail. Teammates can still bid normally to cover you.",
+                        },
+                        {
+                            emoji: "🛑",
+                            category: "Bidding",
+                            title: "The Board (Minimum Bid)",
+                            body: "A common house rule where the minimum combined team bid must be at least 4. This prevents teams from bidding ultra-low just to avoid bags.",
+                        },
+                        {
+                            emoji: "📊",
+                            category: "Scoring",
+                            title: "Standard Scoring",
+                            body: "If a team meets or exceeds their bid, they score 10 points per trick bid. Extra tricks (bags) are worth 1 point each. Failing to meet a bid results in a 'set' (negative 10 points per trick bid).",
+                        },
+                        {
+                            emoji: "🏚️",
+                            category: "Scoring",
+                            title: "Going Set",
+                            body: "If your team wins fewer tricks than your combined bid, you earn zero points for those tricks and instead lose 10 points for every trick you bid. (e.g., Bid 6, Get 5 = -60 points).",
+                        },
+                        {
+                            emoji: "🛄",
+                            category: "Scoring",
+                            title: "Bags & Penalties",
+                            body: "Bags accumulate across rounds. Every time a team reaches 10 total bags, they are penalized 100 points and their bag count resets to zero.",
+                        },
+                        {
+                            emoji: "🔟",
+                            category: "Scoring",
+                            title: "10-for-200",
+                            body: "If a team bids exactly 10 tricks and wins exactly 10, they receive 200 points. If they fail to hit 10, they lose 100 points. A risky but powerful way to catch up.",
+                        },
+
+                        // --- DECK VARIATIONS ---
+                        {
+                            emoji: "🃏🃏",
+                            category: "Variations",
+                            title: "Joker Joker Deuce Deuce",
+                            body: "Street style! The Big Joker (full color) is #1, Little Joker (B&W) is #2, 2 of Diamonds is #3, and 2 of Spades is #4. The 2 of Clubs and 2 of Hearts are removed from the deck.",
+                        },
+                        {
+                            emoji: "🃏🅰️",
+                            category: "Variations",
+                            title: "Joker Joker Ace",
+                            body: "The two Jokers are the highest trump cards, followed by the Ace of Spades. This makes the Ace the third most powerful card in the game.",
+                        },
+
+                        // --- GAME MODES ---
+                        {
+                            emoji: "💀",
+                            category: "Variations",
+                            title: "Suicide",
+                            body: "One partner on each team MUST bid Nil, while the other partner must bid at least 4. High risk, high reward, and very fast gameplay.",
+                        },
+                        {
+                            emoji: "🧙‍♂️",
+                            category: "Variations",
+                            title: "Whiz",
+                            body: "Bidding is automatic. You must bid the exact number of Spades in your hand. If you have no Spades, you must bid Nil.",
+                        },
+                        {
+                            emoji: "🪞",
+                            category: "Variations",
+                            title: "Mirror",
+                            body: "Your bid must exactly equal the number of Spades in your hand. Unlike Whiz, if you have Spades, you cannot choose to go Nil.",
+                        },
+
+                        // --- CONDUCT ---
+                        {
+                            emoji: "🕵️",
+                            category: "Conduct",
+                            title: "Reneging",
+                            body: "Failing to follow suit when you have the card is 'reneging.' If caught, the offending team is typically penalized 3 tricks, which are given to the opponents.",
+                        },
+                        {
+                            emoji: "🎯",
+                            category: "Ending",
+                            title: "Winning the Game",
+                            body: "First team to 500 points wins. If both teams cross 500 in the same round, the higher score wins. If a team drops to -200 points, they automatically lose.",
+                        },
+                    ].map(({ emoji, title, body }) => (
+                        <div key={title} className="flex gap-3">
+                            <div className="text-xl shrink-0 mt-0.5">
+                                {emoji}
+                            </div>
+                            <div>
+                                <p className="m-0 text-white font-bold text-sm mb-1">
+                                    {title}
+                                </p>
+                                <p className="m-0 text-[#a78bfa] text-xs leading-relaxed">
+                                    {body}
+                                </p>
+                            </div>
+                        </div>
+                    ))}
+
+                    {/* Quick scoring reference */}
+                    <div className="bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.25)] rounded-[14px] p-4">
+                        <p className="m-0 text-[#c4b5fd] font-bold text-xs mb-3 tracking-widest">
+                            QUICK SCORING REFERENCE
+                        </p>
+                        <div className="flex flex-col gap-2">
+                            {[
+                                ["Made bid", "+10 pts per trick bid"],
+                                ["Overtricks (bags)", "+1 pt each"],
+                                ["Failed bid", "−10 pts per trick bid"],
+                                ["Nil success", "+100 pts"],
+                                ["Nil failure", "−100 pts"],
+                                ["10 bags penalty", "−100 pts"],
+                                ["Win condition", "500 pts"],
+                            ].map(([label, value]) => (
+                                <div
+                                    key={label}
+                                    className="flex justify-between items-center text-xs"
+                                >
+                                    <span className="text-[#818cf8]">
+                                        {label}
+                                    </span>
+                                    <span className="text-white font-bold">
+                                        {value}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <p className="m-0 text-[10px] text-[#4b5563] text-center pb-1">
+                        Scoring values can be customized in room settings.
+                    </p>
+                </div>
+            </div>
+        </div>
     )
-    const [settings, setSettings] = useState(
-        session?.settings ?? {
-            ...defaultSettings,
-        },
-    )
-    const [round, setRound] = useState(session?.round ?? 1)
-    const [phase, setPhase] = useState(session?.phase ?? "bidding")
-    const [bids, setBids] = useState(session?.bids ?? ["", ""])
-    const [tricks, setTricks] = useState(session?.tricks ?? ["", ""])
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
+
+export default function App() {
+    const [gameId, setGameId] = useState<string | null>(null)
+    const [screen, setScreen] = useState("home")
+    const [room, setRoom] = useState("")
+    const [teams, setTeams] = useState([
+        { name: "Team North/South", score: 0, bags: 0 },
+        { name: "Team East/West", score: 0, bags: 0 },
+    ])
+    const [settings, setSettings] = useState({
+        ...defaultSettings,
+    })
+    const [round, setRound] = useState(1)
+    const [phase, setPhase] = useState("bidding")
+    const [bids, setBids] = useState(["", ""])
+    const [tricks, setTricks] = useState(["", ""])
     const [history, setHistory] = useState<
         Array<{
             round: number
@@ -207,18 +468,18 @@ export default function App() {
             tricks: string[]
             scores: number[]
         }>
-    >(session?.history ?? [])
-    const [showHistory, setShowHistory] = useState(
-        session?.showHistory ?? false,
-    )
-    const [editIdx, setEditIdx] = useState<null | number>(
-        session?.editIdx ?? null,
-    )
-    const [tempName, setTempName] = useState(session?.tempName ?? "")
+    >([])
+    const [showHistory, setShowHistory] = useState(false)
+    const [editIdx, setEditIdx] = useState<null | number>(null)
+    const [tempName, setTempName] = useState("")
+    const [savedGames, setSavedGames] = useState(() => loadGames())
+    const [showRules, setShowRules] = useState(false)
 
-    useEffect(() => {
-        setSession({
-            screen,
+    // ── Persistence helpers ──
+    const persistCurrentGame = (overrides = {}) => {
+        if (!gameId) return
+        const state = {
+            id: gameId,
             room,
             teams,
             settings,
@@ -227,25 +488,31 @@ export default function App() {
             bids,
             tricks,
             history,
-            showHistory,
-            editIdx,
-            tempName,
-        })
-    }, [
-        screen,
-        room,
-        teams,
-        settings,
-        round,
-        phase,
-        bids,
-        tricks,
-        history,
-        showHistory,
-        editIdx,
-        tempName,
-        setSession,
-    ])
+            savedAt: Date.now(),
+            ...overrides,
+        }
+        saveGame(state)
+        setSavedGames(loadGames())
+    }
+
+    const handleResumeGame = (game) => {
+        setGameId(game.id)
+        setRoom(game.room)
+        setTeams(game.teams)
+        setSettings(game.settings)
+        setRound(game.round)
+        setPhase(game.phase)
+        setBids(game.bids)
+        setTricks(game.tricks)
+        setHistory(game.history)
+        setShowHistory(false)
+        setScreen("game")
+    }
+
+    const handleDeleteGame = (id) => {
+        deleteGame(id)
+        setSavedGames(loadGames())
+    }
 
     const resetAll = () => {
         setScreen("home")
@@ -261,9 +528,12 @@ export default function App() {
         setTricks(["", ""])
         setHistory([])
         setShowHistory(false)
+        setSavedGames(loadGames())
     }
 
     const startGame = () => {
+        const id = `game_${Date.now()}`
+        setGameId(id)
         setTeams((t: any[]) => t.map((x) => ({ ...x, score: 0, bags: 0 })))
         setRound(1)
         setPhase("bidding")
@@ -277,6 +547,7 @@ export default function App() {
         if (bids[0] === "" || bids[1] === "") return
         setPhase("tricks")
         setTricks(["", ""])
+        persistCurrentGame({ phase: "tricks", tricks: ["", ""] })
     }
 
     const submitTricks = () => {
@@ -287,77 +558,79 @@ export default function App() {
             alert("Tricks must sum to 13!")
             return
         }
-
-        const newTeams = teams.map(
-            (team: { bags: number; score: number }, i: number) => {
-                const bid = +bids[i],
-                    won = i === 0 ? t0 : t1
-                let delta = 0,
-                    newBags = team.bags
-                if (bid === 0 && settings.allowNil) {
-                    delta = won === 0 ? settings.nilBonus : -settings.nilBonus
+        const newTeams = teams.map((team, i) => {
+            const bid = +bids[i],
+                won = i === 0 ? t0 : t1
+            let delta = 0,
+                newBags = team.bags
+            if (bid === 0 && settings.allowNil) {
+                delta = won === 0 ? settings.nilBonus : -settings.nilBonus
+            } else {
+                if (won >= bid) {
+                    const over = won - bid
+                    delta = bid * 10 + over
+                    newBags += over
                 } else {
-                    if (won >= bid) {
-                        const over = won - bid
-                        delta = bid * 10 + over
-                        newBags += over
-                    } else {
-                        delta = -(bid * 10)
-                    }
-                    delta -=
-                        (Math.floor(newBags / settings.bagLimit) -
-                            Math.floor(team.bags / settings.bagLimit)) *
-                        settings.bagPenalty
+                    delta = -(bid * 10)
                 }
-                return { ...team, score: team.score + delta, bags: newBags }
-            },
-        )
-
-        setHistory((h) => [
-            ...h,
+                delta -=
+                    (Math.floor(newBags / settings.bagLimit) -
+                        Math.floor(team.bags / settings.bagLimit)) *
+                    settings.bagPenalty
+            }
+            return { ...team, score: team.score + delta, bags: newBags }
+        })
+        const newHistory = [
+            ...history,
             {
                 round,
                 bids: [...bids],
                 tricks: [...tricks],
-                scores: newTeams.map((t: { score: any }) => t.score),
+                scores: newTeams.map((t) => t.score),
             },
-        ])
+        ]
+        const newRound = round + 1
+        const isDone = newTeams.some((t) => t.score >= settings.winScore)
+
+        setHistory(newHistory)
         setTeams(newTeams)
 
-        if (
-            newTeams.some(
-                (t: { score: number }) => t.score >= settings.winScore,
-            )
-        ) {
+        if (isDone) {
             setPhase("done")
+            persistCurrentGame({
+                teams: newTeams,
+                history: newHistory,
+                phase: "done",
+                bids: ["", ""],
+                tricks: ["", ""],
+            })
         } else {
-            setRound((r: number) => r + 1)
+            setRound(newRound)
             setPhase("bidding")
             setBids(["", ""])
             setTricks(["", ""])
+            persistCurrentGame({
+                teams: newTeams,
+                history: newHistory,
+                round: newRound,
+                phase: "bidding",
+                bids: ["", ""],
+                tricks: ["", ""],
+            })
         }
     }
 
-    const saveToLocalStorage = () => {
-        if (session) {
-            setBacklog((prev) => [...prev, session])
-            setSession(null)
-            resetAll()
-        }
-    }
-
-    // Shared Tailwind styles
     const cardClass =
         "bg-violet-500/10 border border-violet-500/25 rounded-[18px] p-5"
     const numBtnBase =
         "w-10 h-10 rounded-xl font-bold text-xs cursor-pointer transition-all duration-150 flex items-center justify-center"
     const bigBtnBase =
-        "w-full py-3.5 rounded-2xl font-bold text-lg mt-[18px] transition-all"
+        "w-full py-3.5 rounded-2xl font-bold text-lg mt-[18px] transition-all cursor-pointer"
 
     // HOME SCREEN
     if (screen === "home")
         return (
-            <div className="min-h-screen bg-[#0f0a1e] text-white flex flex-col items-center justify-center p-6 font-sans">
+            <div className="min-h-screen bg-[#0f0a1e] text-white flex flex-col items-center justify-center p-12 font-sans">
                 <div className="text-7xl mb-1">♠</div>
                 <h1 className="text-[46px] font-black m-0 bg-gradient-to-br from-[#818cf8] to-[#c084fc] bg-clip-text text-transparent">
                     Bookkeeper
@@ -388,12 +661,20 @@ export default function App() {
                     >
                         Create Room →
                     </button>
+                    <div className="mt-3">
+                        <button
+                            onClick={() => setShowRules(true)}
+                            className="bg-transparent border-none text-[#818cf8]/40 hover:text-[#a78bfa] text-xs cursor-pointer font-medium transition-colors duration-150 underline underline-offset-2"
+                        >
+                            How to Play Spades?
+                        </button>
+                    </div>
                 </div>
                 {/* Previous Games */}
-                {backlog.length > 0 && (
-                    <div className="px-4 pb-10 max-w-[780px] mx-auto">
+                {savedGames.length > 0 && (
+                    <div className="pb-10 max-w-[720px] mx-auto">
                         <div className="flex items-center justify-between mb-3">
-                            <p className="text-xs text-[#7c3aed] font-bold tracking-[2px] m-0">
+                            <p className="text-xs text-[#818cf8] font-bold tracking-[2px] m-0">
                                 PREVIOUS GAMES
                             </p>
                             <button
@@ -404,7 +685,7 @@ export default function App() {
                                         )
                                     ) {
                                         localStorage.removeItem(STORAGE_KEY)
-                                        setBacklog([])
+                                        setSavedGames([])
                                     }
                                 }}
                                 className="text-[10px] text-[#6b7280] hover:text-[#fca5a5] bg-transparent border-none cursor-pointer font-semibold transition-colors"
@@ -413,19 +694,19 @@ export default function App() {
                             </button>
                         </div>
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            {backlog.map((game) => (
+                            {savedGames.map((game) => (
                                 <PreviousGameCard
                                     key={game.id}
                                     game={game}
-                                    onResume={() => {}}
-                                    onDelete={() => {}}
+                                    onResume={handleResumeGame}
+                                    onDelete={handleDeleteGame}
                                 />
                             ))}
                         </div>
                     </div>
                 )}
 
-                {backlog.length === 0 && (
+                {savedGames.length === 0 && (
                     <div className="flex flex-col items-center pb-10 opacity-30">
                         <div className="text-3xl mb-2">🃏</div>
                         <p className="text-xs text-[#818cf8] font-semibold m-0">
@@ -433,13 +714,16 @@ export default function App() {
                         </p>
                     </div>
                 )}
+                {showRules && (
+                    <RulesModal onClose={() => setShowRules(false)} />
+                )}
             </div>
         )
 
     // LOBBY SCREEN
     if (screen === "lobby")
         return (
-            <div className="min-h-screen bg-[#0f0a1e] text-white p-6 font-sans">
+            <div className="min-h-screen bg-[#0f0a1e] text-white p-6 font-sans pt-10">
                 <div className="max-w-[480px] mx-auto">
                     <div className="flex items-center gap-3 mb-8">
                         <button
@@ -594,7 +878,7 @@ export default function App() {
                     </div>
 
                     <button
-                        className={`${bigBtnBase} bg-gradient-to-br from-[#6366f1] to-[#a855f7] text-white`}
+                        className={`${bigBtnBase} bg-gradient-to-br from-[#6366f1] to-[#a855f7] text-white cursor-pointer`}
                         onClick={startGame}
                     >
                         Start Game
@@ -617,14 +901,14 @@ export default function App() {
         <div className="min-h-screen bg-[#0f0a1e] text-white font-sans">
             {/* Navbar */}
             <div className="flex flex-wrap gap-y-2 items-center justify-between py-3.5 px-5 border-b border-[#8b5cf633] bg-black/30">
-                <div
-                    className="flex items-center gap-2.5"
-                    onClick={() => {
-                        saveToLocalStorage()
-                    }}
-                >
-                    <span className="text-[18px]">♠</span>
-                    <span className="font-black text-[17px]">{room}</span>
+                <div className="flex items-center gap-2.5">
+                    <div
+                        className="flex items-center cursor-pointer gap-2.5"
+                        onClick={resetAll}
+                    >
+                        <span className="text-[18px]">♠</span>
+                        <span className="font-black text-[17px]">{room}</span>
+                    </div>
                     <span className="bg-[#7c3aed4d] text-[#c4b5fd] rounded-full px-2.5 py-0.5 text-[12px] font-bold">
                         Round {round}
                     </span>
@@ -655,7 +939,7 @@ export default function App() {
                                     {i === 0 ? "🔵" : "🔴"}
                                 </span>
                                 <span className="font-bold text-[12px] text-[#c4b5fd] truncate">
-                                    {t.name}
+                                    {t.name} {round % 2 !== i && "•"}
                                 </span>
                             </div>
                             <div className="text-[42px] font-black leading-none bg-gradient-to-br from-white to-[#c4b5fd] bg-clip-text text-transparent">
