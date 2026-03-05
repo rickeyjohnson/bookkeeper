@@ -1,8 +1,41 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { Lock, Pencil, Share, Trash2 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { Lock, Trash2 } from "lucide-react"
+import { useState } from "react"
 
-const defaultSettings = {
+interface Team {
+    name: string
+    score: number
+    bags: number
+}
+
+interface Settings {
+    winScore: number
+    bagLimit: number
+    bagPenalty: number
+    nilBonus: number
+    allowNil: boolean
+}
+
+interface History {
+    round: number
+    bids: string[]
+    tricks: string[]
+    scores: number[]
+}
+
+interface GameState {
+    id: string
+    room: string
+    teams: Team[]
+    settings: Settings
+    round: number
+    phase: string
+    bids: string[]
+    tricks: string[]
+    history: History[]
+    savedAt: number
+}
+
+const defaultSettings: Settings = {
     winScore: 500,
     bagLimit: 10,
     bagPenalty: 100,
@@ -22,21 +55,25 @@ const loadGames = () => {
     }
 }
 
-const saveGame = (gameState) => {
+const saveGame = (gameState: GameState) => {
     try {
         const games = loadGames()
-        const existing = games.findIndex((g) => g.id === gameState.id)
+        const existing = games.findIndex((g: GameState) => g.id === gameState.id)
         if (existing >= 0) games[existing] = gameState
         else games.unshift(gameState)
         localStorage.setItem(STORAGE_KEY, JSON.stringify(games.slice(0, 10)))
-    } catch {}
+    } catch {
+        return
+    }
 }
 
-const deleteGame = (id) => {
+const deleteGame = (id: string) => {
     try {
-        const games = loadGames().filter((g) => g.id !== id)
+        const games = loadGames().filter((g: GameState) => g.id !== id)
         localStorage.setItem(STORAGE_KEY, JSON.stringify(games))
-    } catch {}
+    } catch {
+        return
+    }
 }
 
 // ─── Sub Components ─────────────────────────────────────────────────────────────────
@@ -69,10 +106,10 @@ const Pips = ({ bags, bag_limit }: { bags: number; bag_limit: number }) => {
     )
 }
 
-const formatDate = (ts) => {
+const formatDate = (ts: number) => {
     const d = new Date(ts)
     const now = new Date()
-    const diffMs = now - d
+    const diffMs = +now - +d
     const diffMins = Math.floor(diffMs / 60000)
     const diffHours = Math.floor(diffMs / 3600000)
     const diffDays = Math.floor(diffMs / 86400000)
@@ -85,7 +122,15 @@ const formatDate = (ts) => {
 }
 
 // ─── Previous Game Card ─────────────────────────────────────────────────────────────────
-const PreviousGameCard = ({ game, onResume, onDelete }) => {
+const PreviousGameCard = ({
+    game,
+    onResume,
+    onDelete,
+}: {
+    game: GameState
+    onResume: (state: GameState) => void
+    onDelete: (id: string) => void
+}) => {
     const [menuOpen, setMenuOpen] = useState(false)
     const isDone = game.phase === "done"
     const winner = isDone
@@ -95,7 +140,7 @@ const PreviousGameCard = ({ game, onResume, onDelete }) => {
         : null
     const leading = game.teams[0].score >= game.teams[1].score ? 0 : 1
 
-    const handleDelete = (e) => {
+    const handleDelete = (e: React.MouseEvent<HTMLButtonElement>) => {
         e.stopPropagation()
         setMenuOpen(false)
         onDelete(game.id)
@@ -235,7 +280,7 @@ const PreviousGameCard = ({ game, onResume, onDelete }) => {
 }
 
 // ─── Rules Modal ─────────────────────────────────────────────────────────────────
-const RulesModal = ({ onClose }) => {
+const RulesModal = ({ onClose }: { onClose: () => void }) => {
     return (
         <div
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-[rgba(0,0,0,0.75)]"
@@ -495,7 +540,7 @@ export default function App() {
         setSavedGames(loadGames())
     }
 
-    const handleResumeGame = (game) => {
+    const handleResumeGame = (game: GameState) => {
         setGameId(game.id)
         setRoom(game.room)
         setTeams(game.teams)
@@ -509,7 +554,7 @@ export default function App() {
         setScreen("game")
     }
 
-    const handleDeleteGame = (id) => {
+    const handleDeleteGame = (id: string) => {
         deleteGame(id)
         setSavedGames(loadGames())
     }
@@ -534,7 +579,7 @@ export default function App() {
     const startGame = () => {
         const id = `game_${Date.now()}`
         setGameId(id)
-        setTeams((t: any[]) => t.map((x) => ({ ...x, score: 0, bags: 0 })))
+        setTeams((t: Team[]) => t.map((x) => ({ ...x, score: 0, bags: 0 })))
         setRound(1)
         setPhase("bidding")
         setBids(["", ""])
@@ -694,7 +739,7 @@ export default function App() {
                             </button>
                         </div>
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            {savedGames.map((game) => (
+                            {savedGames.map((game: GameState) => (
                                 <PreviousGameCard
                                     key={game.id}
                                     game={game}
@@ -746,7 +791,7 @@ export default function App() {
                         Teams
                     </p>
                     <div className="flex flex-col gap-2.5 mb-7">
-                        {teams.map((t: any, i: any) => (
+                        {teams.map((t: Team, i: number) => (
                             <div
                                 key={i}
                                 className={`${cardClass} flex items-center gap-3`}
@@ -765,14 +810,15 @@ export default function App() {
                                             }
                                             onKeyDown={(e) =>
                                                 e.key === "Enter" &&
-                                                (setTeams((tm: any) =>
-                                                    tm.map((x: any, j: any) =>
-                                                        j === i
-                                                            ? {
-                                                                  ...x,
-                                                                  name: tempName,
-                                                              }
-                                                            : x,
+                                                (setTeams((tm: Team[]) =>
+                                                    tm.map(
+                                                        (x: Team, j: number) =>
+                                                            j === i
+                                                                ? {
+                                                                      ...x,
+                                                                      name: tempName,
+                                                                  }
+                                                                : x,
                                                     ),
                                                 ),
                                                 setEditIdx(null))
@@ -780,14 +826,15 @@ export default function App() {
                                         />
                                         <button
                                             onClick={() => {
-                                                setTeams((tm: any) =>
-                                                    tm.map((x: any, j: any) =>
-                                                        j === i
-                                                            ? {
-                                                                  ...x,
-                                                                  name: tempName,
-                                                              }
-                                                            : x,
+                                                setTeams((tm: Team[]) =>
+                                                    tm.map(
+                                                        (x: Team, j: number) =>
+                                                            j === i
+                                                                ? {
+                                                                      ...x,
+                                                                      name: tempName,
+                                                                  }
+                                                                : x,
                                                     ),
                                                 )
                                                 setEditIdx(null)
@@ -844,7 +891,7 @@ export default function App() {
                                             ],
                                         )}
                                         onChange={(e) =>
-                                            setSettings((s: any) => ({
+                                            setSettings((s: Settings) => ({
                                                 ...s,
                                                 [k as keyof typeof settings]:
                                                     +e.target.value,
@@ -863,7 +910,7 @@ export default function App() {
                             </span>
                             <div
                                 onClick={() =>
-                                    setSettings((s: any) => ({
+                                    setSettings((s: Settings) => ({
                                         ...s,
                                         allowNil: !s.allowNil,
                                     }))
@@ -915,7 +962,7 @@ export default function App() {
                 </div>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => setShowHistory((h: any) => !h)}
+                        onClick={() => setShowHistory((h: boolean) => !h)}
                         className="bg-[#8b5cf626] border border-[#8b5cf64d] text-[#a78bfa] rounded-lg px-3 py-1.5 cursor-pointer text-[12px] font-bold"
                     >
                         {showHistory ? "Hide" : "📋"} History
@@ -932,7 +979,7 @@ export default function App() {
             <div className="max-w-[520px] mx-auto py-5 px-4">
                 {/* Scoreboard Grid */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                    {teams.map((t: any, i: any) => (
+                    {teams.map((t: Team, i: number) => (
                         <div key={i} className={cardClass}>
                             <div className="flex items-center gap-1.5 mb-2.5">
                                 <span className="text-[18px]">
@@ -1005,7 +1052,7 @@ export default function App() {
                         <h3 className="m-0 mb-[18px] text-[17px] font-extrabold text-[#e9d5ff]">
                             ✋ Place Bids — Round {round}
                         </h3>
-                        {teams.map((t: any, i: any) => (
+                        {teams.map((t: Team, i: number) => (
                             <div key={i} className="mb-5 last:mb-0">
                                 <label className="text-[12px] text-[#a78bfa] font-bold tracking-wider block mb-2 uppercase">
                                     {t.name}
@@ -1058,7 +1105,7 @@ export default function App() {
                             &nbsp;·&nbsp; {teams[1].name}: bid{" "}
                             <strong className="text-white">{bids[1]}</strong>
                         </p>
-                        {teams.map((t: any, i: any) => (
+                        {teams.map((t: Team, i: number) => (
                             <div key={i} className="mb-5 last:mb-0">
                                 <label className="text-[12px] text-[#a78bfa] font-bold tracking-wider block mb-2 uppercase">
                                     {t.name}{" "}
